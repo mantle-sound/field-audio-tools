@@ -33,6 +33,14 @@ python -m pip install -e '.[test]'
 pytest
 ```
 
+If the checkout is on a FAT/exFAT-style filesystem that does not support
+symbolic links, create the virtual environment on a Linux filesystem instead:
+
+```sh
+python -m venv ~/.venvs/field-audio-tools
+~/.venvs/field-audio-tools/bin/pip install -e '/path/to/field-audio-tools[test]'
+```
+
 ## soundcite
 
 Create a 20-second evidence package from a stereo file:
