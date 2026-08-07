@@ -313,3 +313,47 @@ def test_a_run_without_padding_keeps_the_old_manifest_shape():
     page = _html_page(manifest)
     assert "Cited range" not in page
     assert "Padding" not in page
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+    reason="FFmpeg is required for the integration test",
+)
+def test_a_package_reproduces_byte_for_byte(tmp_path):
+    """The Ogg muxer picks a random stream serial unless told not to.
+
+    Without -bitexact this fails on preview.ogg, and through it on SHA256SUMS,
+    manifest.json and index.html, so a package could never be checked by
+    regenerating it.
+    """
+    source = tmp_path / "track.wav"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+            "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+            "-c:a", "pcm_f32le", str(source),
+        ],
+        check=True,
+    )
+
+    def build(name):
+        output = tmp_path / name
+        create_package(
+            build_parser().parse_args(
+                [str(source), "--start", "0.5", "--duration", "1",
+                 "--title", "Fixed", "--output", str(output)]
+            )
+        )
+        return output
+
+    first, second = build("one"), build("two")
+    differing = [
+        path.name
+        for path in sorted(first.iterdir())
+        # created_at moves on every run by design, and it reaches index.html
+        # through the embedded manifest.
+        if path.name not in {"manifest.json", "index.html", "index-bare.html",
+                             "SHA256SUMS"}
+        and path.read_bytes() != (second / path.name).read_bytes()
+    ]
+    assert differing == []

@@ -143,6 +143,12 @@ def _extract(
 
 
 def _make_preview(ffmpeg: str, excerpts: list[Path], destination: Path) -> None:
+    # -bitexact must sit with the output options, not before -i: as a global
+    # option it never reaches the muxer. It stops the Ogg muxer generating a
+    # random stream serial number, which is what kept two identical runs from
+    # producing identical files. It also drops FFmpeg's version from the
+    # vendor string, and that version is already in the manifest where it can
+    # be read. The encoded audio is unaffected.
     command = [ffmpeg, "-v", "error", "-y"]
     for excerpt in excerpts:
         command.extend(["-i", str(excerpt)])
@@ -155,6 +161,7 @@ def _make_preview(ffmpeg: str, excerpts: list[Path], destination: Path) -> None:
                 "libopus",
                 "-b:a",
                 "160k",
+                "-bitexact",
                 str(destination),
             ]
         )
@@ -174,6 +181,7 @@ def _make_preview(ffmpeg: str, excerpts: list[Path], destination: Path) -> None:
                 "libopus",
                 "-b:a",
                 "192k",
+                "-bitexact",
                 str(destination),
             ]
         )

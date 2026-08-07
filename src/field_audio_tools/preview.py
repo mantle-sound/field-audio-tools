@@ -50,6 +50,10 @@ def write_preview_segments(
     while start < duration_seconds - 0.001:
         chunk_duration = min(chunk_seconds, duration_seconds - start)
         destination = preview_dir / segment_name(chunk_index)
+        # -bitexact belongs with the output options; as a global option it
+        # never reaches the muxer. It stops the Ogg muxer generating a random
+        # stream serial number, so the same input produces the same file.
+        # Without it a package can never be verified by regenerating it.
         command = [ffmpeg, "-v", "error", "-y"]
         for source in sources:
             command.extend(
@@ -73,6 +77,7 @@ def write_preview_segments(
                     "libopus",
                     "-b:a",
                     bitrate,
+                    "-bitexact",
                     str(destination),
                 ]
             )
@@ -91,6 +96,7 @@ def write_preview_segments(
                     "libopus",
                     "-b:a",
                     bitrate,
+                    "-bitexact",
                     str(destination),
                 ]
             )
