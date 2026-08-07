@@ -216,14 +216,55 @@ def _write_checksums(output: Path, names: list[str]) -> None:
     (output / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _padding(args: argparse.Namespace) -> tuple[float, float]:
+    """Resolve --pad, --pad-start and --pad-end into head and tail seconds.
+
+    `--pad` sets both ends. The specific flags override it, so an asymmetric
+    request only has to name the end that differs.
+    """
+    def seconds(flag: str, value: str | None, fallback: float) -> float:
+        if value is None:
+            return fallback
+        try:
+            # parse_time already refuses negative values; naming the flag is
+            # the only thing missing from the message it raises.
+            return parse_time(value)
+        except ValueError as exc:
+            raise ToolError(f"{flag}: {exc}") from exc
+
+    base = seconds("--pad", args.pad, 0.0)
+    return (
+        seconds("--pad-start", args.pad_start, base),
+        seconds("--pad-end", args.pad_end, base),
+    )
+
+
 def _html_page(
     manifest: dict[str, Any], *, site_package_href: str | None = None
 ) -> str:
     citation = manifest["citation"]
     title = html.escape(citation.get("title") or "Field recording excerpt")
+    clip = manifest["clip"]
+    cited = clip.get("cited")
+    padding = clip.get("padding")
     rows = [
-        ("Start", manifest["clip"]["start_timecode"]),
-        ("Duration", f'{manifest["clip"]["duration_seconds"]:.3f} seconds'),
+        ("Start", clip["start_timecode"]),
+        ("Duration", f'{clip["duration_seconds"]:.3f} seconds'),
+        (
+            "Cited range",
+            f'{cited["start_timecode"]} for {cited["duration_seconds"]:.3f} seconds'
+            if cited
+            else None,
+        ),
+        (
+            "Padding",
+            f'{padding["start_seconds"]:.3f} seconds before, '
+            f'{padding["end_seconds"]:.3f} seconds after'
+            + (" (limited by the ends of the file)"
+               if padding["start_clamped"] or padding["end_clamped"] else "")
+            if padding
+            else None,
+        ),
         ("Recorded", citation.get("recorded_at")),
         ("Location", citation.get("location")),
         ("Recordist", citation.get("recordist")),
@@ -311,6 +352,7 @@ def create_package(args: argparse.Namespace) -> Path:
     duration = parse_time(args.duration)
     if duration <= 0:
         raise ToolError("Duration must be greater than zero")
+    pad_start, pad_end = _padding(args)
     probes = [probe_audio(source) for source in sources]
     sample_rate = _validate_sources(sources, probes)
     for source, probe in zip(sources, probes, strict=True):
@@ -319,8 +361,22 @@ def create_package(args: argparse.Namespace) -> Path:
         if start + duration > _duration(probe) + 0.001:
             raise ToolError(f"Requested excerpt extends beyond the end of {source}")
 
-    start_sample = round(start * sample_rate)
-    duration_samples = round(duration * sample_rate)
+    cited_start_sample = round(start * sample_rate)
+    cited_duration_samples = round(duration * sample_rate)
+
+    # Padding runs out at the ends of the file. Trim it to what is available
+    # rather than refusing the run, and record how much survived: an excerpt
+    # that quietly carried less context than asked for would misdescribe
+    # itself, and this tool exists to describe itself accurately.
+    available = min(round(_duration(probe) * sample_rate) for probe in probes)
+    head = min(round(pad_start * sample_rate), cited_start_sample)
+    tail = min(
+        round(pad_end * sample_rate),
+        max(available - cited_start_sample - cited_duration_samples, 0),
+    )
+
+    start_sample = cited_start_sample - head
+    duration_samples = cited_duration_samples + head + tail
     exact_start = start_sample / sample_rate
     exact_duration = duration_samples / sample_rate
 
@@ -419,6 +475,31 @@ def create_package(args: argparse.Namespace) -> Path:
             "checksums": {"name": "SHA256SUMS", "algorithm": "SHA-256"},
         },
     }
+    # The fields above describe the audio that was written, because that is
+    # what the checksums cover. When padding widened it, the range actually
+    # being cited is recorded separately, along with how much padding survived
+    # the ends of the file.
+    if pad_start or pad_end:
+        cited_start = cited_start_sample / sample_rate
+        cited_duration = cited_duration_samples / sample_rate
+        manifest["clip"]["cited"] = {
+            "start_seconds": cited_start,
+            "start_timecode": format_time(cited_start),
+            "start_sample": cited_start_sample,
+            "duration_seconds": cited_duration,
+            "duration_samples": cited_duration_samples,
+            "end_seconds": cited_start + cited_duration,
+            "end_timecode": format_time(cited_start + cited_duration),
+            "end_sample": cited_start_sample + cited_duration_samples,
+        }
+        manifest["clip"]["padding"] = {
+            "start_seconds": head / sample_rate,
+            "end_seconds": tail / sample_rate,
+            "start_requested_seconds": pad_start,
+            "end_requested_seconds": pad_end,
+            "start_clamped": head < round(pad_start * sample_rate),
+            "end_clamped": tail < round(pad_end * sample_rate),
+        }
     write_json(output / "manifest.json", manifest)
     bare_html = _html_page(manifest)
     (output / "index-bare.html").write_text(bare_html, encoding="utf-8")
@@ -451,6 +532,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", required=True, help="seconds, MM:SS, or HH:MM:SS")
     parser.add_argument(
         "--duration", default="20", help="excerpt length (default: 20 seconds)"
+    )
+    parser.add_argument(
+        "--pad",
+        help="extra seconds kept at both ends, outside the cited range",
+    )
+    parser.add_argument(
+        "--pad-start", help="extra seconds before the cited range (overrides --pad)"
+    )
+    parser.add_argument(
+        "--pad-end", help="extra seconds after the cited range (overrides --pad)"
     )
     parser.add_argument("-o", "--output", required=True, help="output directory")
     parser.add_argument("--title", default="Field recording excerpt")

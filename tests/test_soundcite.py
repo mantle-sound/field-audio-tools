@@ -9,6 +9,7 @@ import pytest
 
 from field_audio_tools.common import ToolError, probe_audio
 from field_audio_tools.soundcite import (
+    _padding,
     _embedded_excerpt_time,
     _html_page,
     _validate_sources,
@@ -191,3 +192,124 @@ def test_package_has_sample_ranges_and_complete_checksums(tmp_path):
     for line in checksum_lines:
         expected, name = line.split("  ", 1)
         assert hashlib.sha256((output / name).read_bytes()).hexdigest() == expected
+
+
+def _pad_args(**overrides):
+    """A parsed namespace with the padding flags at their defaults."""
+    argv = ["in.wav", "--start", "10", "--duration", "5", "--output", "out"]
+    for flag, value in overrides.items():
+        argv += [f"--{flag.replace('_', '-')}", value]
+    return build_parser().parse_args(argv)
+
+
+def test_padding_defaults_to_nothing():
+    assert _padding(_pad_args()) == (0.0, 0.0)
+
+
+def test_pad_sets_both_ends():
+    assert _padding(_pad_args(pad="3")) == (3.0, 3.0)
+
+
+def test_specific_flags_override_pad():
+    assert _padding(_pad_args(pad="3", pad_end="4")) == (3.0, 4.0)
+    assert _padding(_pad_args(pad="3", pad_start="1")) == (1.0, 3.0)
+
+
+def test_padding_accepts_timecodes():
+    assert _padding(_pad_args(pad_start="00:00:02.5")) == (2.5, 0.0)
+
+
+def test_negative_padding_is_refused():
+    with pytest.raises(ToolError):
+        _padding(_pad_args(pad="-1"))
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+    reason="FFmpeg is required for the integration test",
+)
+def test_padding_widens_the_excerpt_and_records_the_cited_range(tmp_path):
+    source = tmp_path / "track.wav"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+            "-i", "sine=frequency=440:sample_rate=48000:duration=3",
+            "-c:a", "pcm_f32le", str(source),
+        ],
+        check=True,
+    )
+    output = tmp_path / "package"
+    create_package(
+        build_parser().parse_args(
+            [
+                str(source), "--start", "1.0", "--duration", "1.0",
+                "--pad-start", "0.25", "--pad-end", "0.5",
+                "--output", str(output),
+            ]
+        )
+    )
+    clip = json.loads((output / "manifest.json").read_text())["clip"]
+
+    # The top-level range is what the WAV holds, because the checksums cover it.
+    assert clip["start_sample"] == 36000
+    assert clip["duration_samples"] == 84000
+    # The cited range is what the user pointed at.
+    assert clip["cited"]["start_sample"] == 48000
+    assert clip["cited"]["duration_samples"] == 48000
+    assert clip["padding"] == {
+        "start_seconds": 0.25,
+        "end_seconds": 0.5,
+        "start_requested_seconds": 0.25,
+        "end_requested_seconds": 0.5,
+        "start_clamped": False,
+        "end_clamped": False,
+    }
+    assert float(probe_audio(output / "excerpt.wav")["format"]["duration"]) == (
+        pytest.approx(1.75)
+    )
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+    reason="FFmpeg is required for the integration test",
+)
+def test_padding_is_clamped_at_the_ends_and_says_so(tmp_path):
+    source = tmp_path / "track.wav"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+            "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+            "-c:a", "pcm_f32le", str(source),
+        ],
+        check=True,
+    )
+    output = tmp_path / "package"
+    # Asking for a second of context at each end of a two-second file, around a
+    # range that starts a quarter second in and runs to the last quarter second.
+    create_package(
+        build_parser().parse_args(
+            [
+                str(source), "--start", "0.25", "--duration", "1.5",
+                "--pad", "1", "--output", str(output),
+            ]
+        )
+    )
+    clip = json.loads((output / "manifest.json").read_text())["clip"]
+    assert clip["start_sample"] == 0
+    assert clip["padding"]["start_seconds"] == 0.25
+    assert clip["padding"]["start_clamped"] is True
+    assert clip["padding"]["end_seconds"] == 0.25
+    assert clip["padding"]["end_clamped"] is True
+
+
+def test_a_run_without_padding_keeps_the_old_manifest_shape():
+    """Existing packages must not gain fields they never had."""
+    manifest = {
+        "clip": {"start_timecode": "00:00:01.000", "duration_seconds": 2.0},
+        "citation": {"title": "t"},
+        "sources": [],
+        "artifacts": {"lossless_excerpts": [], "checksums": {"name": "SHA256SUMS"}},
+    }
+    page = _html_page(manifest)
+    assert "Cited range" not in page
+    assert "Padding" not in page

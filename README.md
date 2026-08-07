@@ -15,6 +15,10 @@ Three small, local-first command-line tools for field recordings:
 All three tools support a regular mono/stereo file or the two synchronized mono WAV
 files produced by a Zoom F3. Processing stays on the local machine.
 
+They are not three equal siblings. `lowdom` feeds `birdidpv` directly, and
+`soundcite` is what you reach for once a detection has earned it. See
+[how the three fit together](#how-the-three-fit-together).
+
 ## Status
 
 This is an alpha release. In particular, `lowdom` is a screening heuristic,
@@ -54,6 +58,56 @@ overview](https://mantle-sound.org/software/) and a [test note on Take
 002](https://mantle-sound.org/software/running-field-audio-tools-on-a-long-f3-take/)
 with linked demonstration packages.
 
+## How the three fit together
+
+```text
+lowdom  --candidate-clean-intervals.csv-->  birdidpv  --detections.csv-->  you
+                                                                            |
+                                                          a timecode worth keeping
+                                                                            |
+                                                                            v
+                                                                        soundcite
+```
+
+Only the first arrow is automatic. `birdidpv --intervals` reads the CSV `lowdom`
+writes, so screening and identification chain without you retyping anything.
+
+The second arrow is deliberately manual. `soundcite` takes a time range you have
+already decided on, and deciding means listening. On a January lake `birdidpv`
+will offer waterbirds that are not there. In the run this README quotes, a
+Ruddy Shelduck scoring 0.93 was a guide shouting from across the valley. A
+script that piped detections straight into evidence packages would remove the
+one step that catches that.
+
+### Citing a detection
+
+`detections.csv` carries `start_timecode` in `HH:MM:SS.mmm`, which is one of the
+formats `--start` accepts, so the value copies across unchanged. Find the
+longest unbroken run of frames rather than the single best one: a run is better
+evidence than a frame, and `--duration` then covers it.
+
+```sh
+soundcite 260115_002_Tr1.WAV 260115_002_Tr2.WAV \
+  --start 00:40:29.000 \
+  --duration 21 \
+  --pad-start 3 \
+  --pad-end 4 \
+  --title "Red-billed Chough, Take 002" \
+  --recordist "Your Name" \
+  --location "Public-safe description" \
+  --output evidence/chough-004029
+```
+
+Those numbers come from a real run. The longest run in the take is seven frames
+starting at 00:40:29, all *Pyrrhocorax pyrrhocorax*, scoring 0.9863 to 0.9998.
+Seven three-second frames is 21 seconds, which is the `--duration`. The padding
+adds context on both sides, because 00:40:29 is a frame boundary rather than the
+moment the bird began, and cutting exactly on it can clip the first call. See
+[Context around the cited range](#context-around-the-cited-range).
+
+The written excerpt therefore runs 00:40:26 to 00:40:54, while `manifest.json`
+records 00:40:29 for 21 seconds as the range being cited.
+
 ## soundcite
 
 Create a 20-second evidence package from a stereo file:
@@ -88,6 +142,47 @@ The package contains:
 - `SHA256SUMS`: checksums for all other package files
 - `index.html` and `index-bare.html`: identical bare HTML 4.01 citation pages
   from the CLI
+
+### Context around the cited range
+
+`--start` and `--duration` say what you are citing. A call rarely begins where
+you cut, so `--pad` keeps extra seconds on either side without changing what the
+excerpt claims to be:
+
+```sh
+soundcite recording.wav --start 00:40:29 --duration 21 --pad 3
+soundcite recording.wav --start 00:40:29 --duration 21 --pad-start 3 --pad-end 4
+```
+
+`--pad` sets both ends. `--pad-start` and `--pad-end` override it, so an
+asymmetric request only names the end that differs. All three take the same
+formats as `--start`.
+
+This matters most when the time came from `birdidpv`. Detections are scored on a
+fixed three-second grid, and a frame boundary is not the start of a call: it
+only says the call falls somewhere inside those three seconds. Cutting exactly
+on the boundary can clip the opening of the call.
+
+With padding, `manifest.json` separates the two ranges. The top-level `clip`
+describes the audio that was written, because that is what the checksums cover.
+`clip.cited` records the range you asked to cite, and `clip.padding` records how
+much context was added:
+
+```json
+"clip": {
+  "start_timecode": "00:40:26.000", "duration_seconds": 28.0,
+  "cited": { "start_timecode": "00:40:29.000", "duration_seconds": 21.0 },
+  "padding": { "start_seconds": 3.0, "end_seconds": 4.0,
+               "start_clamped": false, "end_clamped": false }
+}
+```
+
+Padding runs out at the ends of a file. Rather than refuse the run, `soundcite`
+keeps what is available and sets `start_clamped` or `end_clamped`, so an excerpt
+that carried less context than requested says so instead of appearing to have
+had none asked for.
+
+Without any padding flag, the manifest keeps the shape it has always had.
 
 For paired mono inputs, `soundcite` checks sample rate, duration, channel count,
 embedded recording time, and BWF time reference before extracting audio. When
