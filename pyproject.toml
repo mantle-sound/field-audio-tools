@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "field-audio-tools"
 version = "0.1.0"
-description = "Small, local-first tools for citing and screening field recordings"
+description = "Small, local-first tools for citing, screening, and identifying field recordings"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0-or-later" }
@@ -26,11 +26,19 @@ dependencies = [
 
 [project.scripts]
 soundcite = "field_audio_tools.soundcite:main"
-windwindow = "field_audio_tools.windwindow:main"
+lowdom = "field_audio_tools.lowdom:main"
+birdidpv = "field_audio_tools.birdidpv:main"
 
 [project.optional-dependencies]
 test = [
   "pytest>=8",
+]
+# birdidpv only. These pull in TensorFlow, so they stay out of the core install.
+birdnet = [
+  "birdnetlib>=0.18",
+  "tensorflow-cpu>=2.16",
+  "librosa>=0.10",
+  "resampy>=0.4",
 ]
 
 [tool.hatch.build.targets.wheel]
