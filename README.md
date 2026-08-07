@@ -302,9 +302,12 @@ self-contained page that can be listened to, looked at, and archived.
 non-commercial condition reaches your results, not just the model: it constrains
 what you may do with what `birdidpv` writes, whatever licence this toolkit carries.
 The BirdNET authors state that educational and research use counts as
-non-commercial. No model file is redistributed here — birdnetlib downloads them
-on first run — so this project's GPL-3.0-or-later and the models' terms do not
-collide in distribution, but they do both apply to you.
+non-commercial. This project redistributes no model file of its own: the models
+arrive inside the birdnetlib package, which is Apache-2.0 but ships the
+CC BY-NC-SA models in its wheel. So this project's GPL-3.0-or-later never meets
+the models' terms in distribution, but both apply to you once installed — and
+because the files then sit on your disk, handing that environment to someone
+else is redistribution under CC BY-NC-SA, share-alike condition included.
 
 **Attribution is a condition of that licence, not a courtesy.** Every run writes
 it into `summary.json` and both reports. If you cite the results, cite:
@@ -324,7 +327,9 @@ pip install -e '.[birdnet]'
 ```
 
 Without it, `birdidpv` exits with an install hint and the other tools are
-unaffected. The first run downloads the BirdNET model files.
+unaffected. The model files come inside the birdnetlib wheel, about 65 MB of
+them, so the install is the only step that needs a network. Analysis itself
+runs offline.
 
 ### What a confidence is not
 

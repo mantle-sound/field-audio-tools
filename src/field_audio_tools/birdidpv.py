@@ -67,10 +67,13 @@ BIRDNET_ATTRIBUTION = {
         "Informatics, 61, 101236."
     ),
     "note": (
-        "Model files are not redistributed with this tool; they are downloaded "
-        "on first run. Their CC BY-NC-SA 4.0 terms apply to how results are "
-        "used, including the non-commercial condition. The BirdNET authors "
-        "state that educational and research purposes count as non-commercial."
+        "This tool redistributes no model file. The models ship inside the "
+        "birdnetlib package and are present once the birdnet extra is "
+        "installed, so analysis needs no network. Installing therefore places "
+        "a CC BY-NC-SA 4.0 copy on disk, and passing that environment on is "
+        "redistribution. Those terms also apply to how results are used, "
+        "including the non-commercial condition. The BirdNET authors state "
+        "that educational and research purposes count as non-commercial."
     ),
 }
 
@@ -93,7 +96,8 @@ BIRDNET_FRAME_SECONDS = 3.0
 _MISSING_EXTRA = (
     "birdidpv needs the optional BirdNET dependencies.\n"
     "Install them with:  pip install 'field-audio-tools[birdnet]'\n"
-    "The first run downloads the BirdNET model files."
+    "That pulls TensorFlow and about 65 MB of model files. Analysis then "
+    "runs offline."
 )
 
 
