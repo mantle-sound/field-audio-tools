@@ -1,34 +1,22 @@
 # field-audio-tools
 
-Three small, local-first command-line tools for field recordings:
+Three local command-line tools for field recordings.
 
-- **soundcite** turns an exact time range into a portable evidence package
-  containing lossless excerpts, a browser preview, a spectrogram, checksums,
-  technical metadata, and a static citation page.
-- **lowdom** screens long recordings for windows dominated by broadband
-  low-frequency energy, a common sign of wind buffeting. It produces a
-  transparent CSV and a static report; it does not delete or alter audio.
-- **birdidpv** runs BirdNET over a recording, or over just the ranges `lowdom`
-  left unflagged, and reports per-frame detections and a species roll-up. It
-  needs an optional extra; see [birdidpv](#birdidpv).
+`soundcite` cuts an exact time range into a portable evidence package: lossless excerpts, a browser preview, a spectrogram, checksums, technical metadata, and a static citation page.
 
-All three tools support a regular mono/stereo file or the two synchronized mono WAV
-files produced by a Zoom F3. Processing stays on the local machine.
+`lowdom` screens long recordings for windows dominated by broadband low-frequency energy, often wind buffeting. It writes a CSV and a static report. It never deletes or alters audio.
 
-They are not three equal siblings. `lowdom` feeds `birdidpv` directly, and
-`soundcite` is what you reach for once a detection has earned it. See
-[how the three fit together](#how-the-three-fit-together).
+`birdidpv` runs BirdNET over a recording, or over the ranges `lowdom` left unflagged, and reports per-frame detections plus a species roll-up. It needs an optional extra; see [birdidpv](#birdidpv).
+
+Each tool accepts a regular mono or stereo file, or the two synchronized mono WAVs from a Zoom F3. Everything runs on the local machine.
+
+`lowdom` feeds `birdidpv` directly. `soundcite` is for a detection you have already decided to keep. See [how the three fit together](#how-the-three-fit-together).
 
 ## Status
 
-This is an alpha release. In particular, `lowdom` is a screening heuristic,
-not a validated wind classifier. Water, vehicles, handling noise, and other
-geophony can look similar. Always listen before excluding recordings from an
-analysis.
+This is an alpha release. `lowdom` in particular is a screening heuristic, not a validated wind classifier. Water, vehicles, handling noise, and other geophony can look similar. Listen before you exclude a recording from an analysis.
 
-The default `lowdom` threshold is **0.95**, chosen provisionally after blind
-listening on one F3 take. An earlier CLI default of **0.6** was a placeholder
-and was not validated on that recording before it was replaced.
+The default `lowdom` threshold is 0.95. That number is provisional: it came from blind listening on one F3 take. An earlier CLI default of 0.6 was a placeholder and had not been checked against that recording.
 
 ## Requirements
 
@@ -72,19 +60,18 @@ lowdom  --candidate-clean-intervals.csv-->  birdidpv  --detections.csv-->  you
 Only the first arrow is automatic. `birdidpv --intervals` reads the CSV `lowdom`
 writes, so screening and identification chain without you retyping anything.
 
-The second arrow is deliberately manual. `soundcite` takes a time range you have
-already decided on, and deciding means listening. On a January lake `birdidpv`
-will offer waterbirds that are not there. In the run this README quotes, a
-Ruddy Shelduck scoring 0.93 was a guide shouting from across the valley. A
-script that piped detections straight into evidence packages would remove the
-one step that catches that.
+The second arrow is manual on purpose. `soundcite` takes a time range you have
+already chosen, and choosing means listening. On a January lake `birdidpv` will
+offer waterbirds that are not there. In the run this README quotes, a Ruddy
+Shelduck scoring 0.93 was a guide shouting from across the valley. Piping
+detections straight into evidence packages would skip the step that catches that.
 
 ### Citing a detection
 
 `detections.csv` carries `start_timecode` in `HH:MM:SS.mmm`, which is one of the
-formats `--start` accepts, so the value copies across unchanged. Find the
-longest unbroken run of frames rather than the single best one: a run is better
-evidence than a frame, and `--duration` then covers it.
+formats `--start` accepts, so the value copies across unchanged. Use the longest
+unbroken run of frames, not the single best score. A run is stronger evidence
+than a frame, and `--duration` then covers it.
 
 ```sh
 soundcite 260115_002_Tr1.WAV 260115_002_Tr2.WAV \
@@ -159,9 +146,9 @@ asymmetric request only names the end that differs. All three take the same
 formats as `--start`.
 
 This matters most when the time came from `birdidpv`. Detections are scored on a
-fixed three-second grid, and a frame boundary is not the start of a call: it
-only says the call falls somewhere inside those three seconds. Cutting exactly
-on the boundary can clip the opening of the call.
+fixed three-second grid. A frame boundary is not the start of a call; it only
+says the call falls somewhere inside those three seconds. Cutting exactly on the
+boundary can clip the opening.
 
 With padding, `manifest.json` separates the two ranges. The top-level `clip`
 describes the audio that was written, because that is what the checksums cover.
@@ -177,12 +164,11 @@ much context was added:
 }
 ```
 
-Padding runs out at the ends of a file. Rather than refuse the run, `soundcite`
-keeps what is available and sets `start_clamped` or `end_clamped`, so an excerpt
-that carried less context than requested says so instead of appearing to have
-had none asked for.
+Padding runs out at the ends of a file. `soundcite` keeps what is available and
+sets `start_clamped` or `end_clamped`, so a shorter excerpt still records that
+more context was asked for.
 
-Without any padding flag, the manifest keeps the shape it has always had.
+Without a padding flag, the manifest has no `cited` or `padding` fields.
 
 For paired mono inputs, `soundcite` checks sample rate, duration, channel count,
 embedded recording time, and BWF time reference before extracting audio. When
@@ -190,8 +176,8 @@ embedded recording time, and BWF time reference before extracting audio. When
 `date`/`creation_time` tags when available. Input paths are private by default;
 add `--include-source-path` only when the path itself belongs in the manifest.
 
-Hashing multi-gigabyte source recordings is deliberately optional. Add
-`--hash-source` when a complete source checksum is required.
+Hashing multi-gigabyte source recordings is optional. Add `--hash-source` when
+you need a complete source checksum.
 
 When publishing on the Mantle site, the demonstration replaces `index.html`
 with a site-styled page and keeps `index-bare.html` as the tool output. Styled
@@ -229,9 +215,9 @@ Outputs:
 - `report-multimedia.html` and `recording-preview-48k/`: optional hover-playback
   report (`--report multimedia` or `--report both`; lossy Opus preview, not for analysis)
 
-The default score measures the proportion of energy in 10–120 Hz relative to
-10–1000 Hz, with simple signal-level and low-band spectral-flatness gates. All
-parameters are recorded in `summary.json`.
+The default score is the share of energy in 10-120 Hz relative to 10-1000 Hz,
+with simple signal-level and low-band spectral-flatness gates. All parameters
+are recorded in `summary.json`.
 
 Mantle demonstration packages may copy CLI HTML to `report-bare.html` and
 `report-multimedia-bare.html` before serving site-styled `report.html` and
@@ -240,7 +226,7 @@ Mantle demonstration packages may copy CLI HTML to `report-bare.html` and
 ## birdidpv
 
 Run [BirdNET](https://birdnet.cornell.edu/) over a recording and report what it
-thinks it heard. One recording and one command is the whole of it:
+thinks it heard:
 
 ```sh
 birdidpv recording.wav \
@@ -254,10 +240,10 @@ multimedia report with its own preview audio, per-frame spectrograms, and
 reference photographs. Nothing in it points outside itself, and none of it needs
 a server.
 
-If you have also run `lowdom`, hand `birdidpv` the ranges it left unflagged rather
-than the whole take. `lowdom` already knows which stretches are not buried under
-low-frequency energy, so the model spends its time where there is something to
-hear:
+If you have also run `lowdom`, hand `birdidpv` the ranges it left unflagged
+rather than the whole take. `lowdom` already knows which stretches are not buried
+under low-frequency energy, so the model spends its time where there is something
+to hear:
 
 ```sh
 birdidpv 260115_002_Tr1.WAV \
@@ -272,10 +258,9 @@ birdidpv 260115_002_Tr1.WAV \
 neither, the whole recording is analysed.
 
 `--lat`, `--lon`, and `--week` restrict the 6,522-species model to species
-plausible at that place and time of year. This matters: unfiltered, the model
-will confidently offer species from the wrong continent. Raise
-`--filter-threshold` to shorten the list further, or supply your own with
-`--species-list`.
+plausible at that place and time of year. Unfiltered, the model will confidently
+offer species from the wrong continent. Raise `--filter-threshold` to shorten
+the list further, or supply your own with `--species-list`.
 
 Outputs:
 
@@ -295,8 +280,8 @@ Outputs:
 
 `--spectrograms` renders one spectrogram per detected frame with FFmpeg, ahead
 of time, from the source audio rather than the lossy preview. The multimedia
-report shows the frame under the pointer, so a detection can be looked at as
-well as listened to:
+report shows the frame under the pointer, so you can look at a detection as well
+as listen to it:
 
 ```sh
 birdidpv recording.wav --output reports/take --report multimedia --spectrograms
@@ -314,13 +299,13 @@ detection is a bird at all. `--spectrogram-size` sets the spectrum area; the
 axis legend adds roughly 280x130 around it. WebP is the default at about a tenth
 the size of PNG; on one 128-detection report that is 2.8 MB rather than 28 MB.
 
-A picture shows you that something is there. It does not tell you what. On the
-Take 002 demo the frame BirdNET scored highest after the corvids, Ruddy Shelduck
-at 0.928, has clear harmonic stacks between 1 and 3 kHz. We read them as a call,
-because ice does not make structure like that. They are a man shouting across
-the lake — a pitch contour through its harmonics, formants near 1.2 and 2 kHz,
-four syllables in the last second. The spectrogram was worth having, and it
-still took listening to settle it.
+A spectrogram shows that something is in the band. It does not identify it. On
+the Take 002 demo, the frame BirdNET scored highest after the corvids was Ruddy
+Shelduck at 0.928, with clear harmonic stacks between 1 and 3 kHz. We read them
+as a call, because ice does not make structure like that. They are a man
+shouting across the lake: a pitch contour through its harmonics, formants near
+1.2 and 2 kHz, four syllables in the last second. The spectrogram was worth
+having. It still took listening to settle it.
 
 Rendering failures are recorded as skipped frames rather than raised, so a
 report is still produced when the source audio has moved since the analysis.
@@ -335,46 +320,45 @@ toolkit that uses the network, so it is off by default:
 birdidpv recording.wav --output reports/take --photos
 ```
 
-Photographs are downloaded **into the package**, not hot-linked: a package has
-to survive being archived and served offline, and hot-linking would also
-disclose every reader's address to a third party. Each file is stored exactly
-as iNaturalist served it, so no derivative is made. `credits.json` records the
+Photographs are downloaded into the package, not hot-linked. A package has to
+survive being archived and served offline, and hot-linking would also disclose
+every reader's address to a third party. Each file is stored exactly as
+iNaturalist served it, so no derivative is made. `credits.json` records the
 photographer, licence, iNaturalist taxon, and source URL for each one.
 
 Only exact scientific-name matches are used. iNaturalist's search is fuzzy and
-ranks congeners highly — a query for *Pyrrhocorax pyrrhocorax* returns
-*Pyrrhocorax graculus* first — and a near miss would caption the report with the
+ranks congeners highly (a query for *Pyrrhocorax pyrrhocorax* returns
+*Pyrrhocorax graculus* first), and a near miss would caption the report with the
 wrong bird. A species with no exact match gets no photograph and a recorded
-reason rather than a guess.
+reason, not a guess.
 
 Photographs with no licence (all rights reserved) are never downloaded.
-`--photo-licenses` narrows what is accepted beyond that; the default accepts the
+`--photo-licenses` narrows what is accepted beyond that. The default accepts the
 CC variants including ND, which is sound only because the file is stored
-verbatim. Network failures are recorded as skipped species, never as errors —
-the report is still worth writing without a picture.
+verbatim. Network failures are recorded as skipped species, never as errors. The
+report is still written without a picture.
 
 A photograph shows what a species looks like. It is not evidence that the
 species was present.
 
-Avibase has no public API and hosts no photographs of its own — the images on
-its species pages are Flickr thumbnails matched by scientific name — so it
-cannot serve this purpose.
+Avibase has no public API and hosts no photographs of its own. The images on its
+species pages are Flickr thumbnails matched by scientific name, so it cannot
+serve this purpose.
 
 ### Preview audio
 
 A hover-playback report needs audio it can load, so `--report multimedia` makes
-sure there is some. If `--preview-dir` already holds segments — a `lowdom`
-package next door, for instance — they are reused and nothing is re-encoded.
-Otherwise `birdidpv` writes its own, exactly as `lowdom` does. Running one command
-on one recording gives you a page that works:
+sure there is some. If `--preview-dir` already holds segments (a `lowdom`
+package next door, for instance), they are reused and nothing is re-encoded.
+Otherwise `birdidpv` writes its own, exactly as `lowdom` does:
 
 ```sh
 birdidpv recording.wav --output reports/take --report multimedia
 ```
 
-`--no-preview` skips this. The report is then built without a player rather than
-with a dead one: the timeline, the spectrograms, and the species filter all
-still work.
+`--no-preview` skips this. The report is then built without a player, so the
+timeline, spectrograms, and species filter still work instead of pointing at
+missing audio.
 
 ### BirdNET, and what it means for your results
 
@@ -382,7 +366,7 @@ None of the identifying here is this project's work. BirdNET is developed by the
 K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of
 Ornithology with Chemnitz University of Technology, and reached through
 [birdnetlib](https://github.com/joeweiss/birdnetlib). This tool decides which
-seconds to hand it and what to do with the answer; the answer is theirs.
+seconds to hand it and what to do with the answer. The answer is theirs.
 
 If identification is all you want, use the official
 [BirdNET-Analyzer](https://birdnet-team.github.io/BirdNET-Analyzer/) instead. It
@@ -392,20 +376,20 @@ classifier training, and more output formats. What is here that is not there is
 the packaging: ranges taken from a `lowdom` screening, and a single
 self-contained page that can be listened to, looked at, and archived.
 
-**Licensing.** BirdNET's source is MIT, but **the models are
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)**. That
+Licensing. BirdNET's source is MIT, but the models are
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). That
 non-commercial condition reaches your results, not just the model: it constrains
 what you may do with what `birdidpv` writes, whatever licence this toolkit carries.
 The BirdNET authors state that educational and research use counts as
 non-commercial. This project redistributes no model file of its own: the models
 arrive inside the birdnetlib package, which is Apache-2.0 but ships the
 CC BY-NC-SA models in its wheel. So this project's GPL-3.0-or-later never meets
-the models' terms in distribution, but both apply to you once installed — and
-because the files then sit on your disk, handing that environment to someone
-else is redistribution under CC BY-NC-SA, share-alike condition included.
+the models' terms in distribution, but both apply to you once installed. Because
+the files then sit on your disk, handing that environment to someone else is
+redistribution under CC BY-NC-SA, share-alike included.
 
-**Attribution is a condition of that licence, not a courtesy.** Every run writes
-it into `summary.json` and both reports. If you cite the results, cite:
+Attribution is a condition of that licence. Every run writes it into
+`summary.json` and both reports. If you cite the results, cite:
 
 > Kahl, S., Wood, C. M., Eibl, M., & Klinck, H. (2021). BirdNET: A deep learning
 > solution for avian diversity monitoring. *Ecological Informatics*, 61, 101236.
@@ -428,10 +412,10 @@ runs offline.
 
 ### What a confidence is not
 
-BirdNET returns a score per 3-second frame. It is not a probability, it is not a
-verified record, and a single high-scoring frame is not a sighting. On a frozen
-lake in January this tool will still offer waterbirds. Treat the output as a
-listening index that tells you where to listen, in the same spirit as `lowdom`.
+BirdNET returns a score per 3-second frame. That score is not a probability, not
+a verified record, and not a sighting on its own. On a frozen lake in January
+this tool will still offer waterbirds. Treat the output as a listening index
+that tells you where to listen, the same way `lowdom` does.
 
 ## Design principles
 
